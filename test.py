@@ -9,12 +9,13 @@ from stock_env.allocation.env_portfolio import StockPortfolioEnv
 from tac.evaluation.evaluate_episodes import eval_test
 from tac.models.transformer_actor import TransformerActor
 import torch.backends.cudnn as cudnn
+from tac.models.ddpg import DDPGActor
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 def experiment(variant):
     device = variant.get('device', 'cuda')
-
+    train_algo = variant['algo'] #control use which algorithm 
     env_name, dataset = variant['env'], variant['dataset']
     group_name = f'{env_name}-{dataset}'
 
@@ -68,21 +69,37 @@ def experiment(variant):
 
     u = variant['u']
 
-    model = TransformerActor(
-        state_dim=state_dim,
-        act_dim=act_dim,
-        max_length=u,
-        max_ep_len=max_ep_len,
-        hidden_size=variant['embed_dim'],
-        n_layer=variant['n_layer'],
-        n_head=variant['n_head'],
-        n_inner=4 * variant['embed_dim'],
-        activation_function=variant['activation_function'],
-        n_positions=1024,
-        resid_pdrop=variant['dropout'],
-        attn_pdrop=variant['dropout'])
-
-    model.load_state_dict(torch.load(group_name+'.pt'))
+    if train_algo == "transformer":
+        model = TransformerActor(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            max_length=u,
+            max_ep_len=max_ep_len,
+            hidden_size=variant['embed_dim'],
+            n_layer=variant['n_layer'],
+            n_head=variant['n_head'],
+            n_inner=4 * variant['embed_dim'],
+            activation_function=variant['activation_function'],
+            n_positions=1024,
+            resid_pdrop=variant['dropout'],
+            attn_pdrop=variant['dropout'],
+        )
+    elif train_algo == "DDPG":
+        model = DDPGActor(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            max_length=u,
+            max_ep_len=max_ep_len,
+            hidden_size=variant['embed_dim'],
+            n_layer=variant['n_layer'],
+            n_head=variant['n_head'],
+            n_inner=4 * variant['embed_dim'],
+            activation_function=variant['activation_function'],
+            n_positions=1024,
+            resid_pdrop=variant['dropout'],
+            attn_pdrop=variant['dropout'],
+        )
+    model.load_state_dict(torch.load(group_name+'_'+train_algo+'.pt')) # ex stock-kdd_DDPG_.pt
 
     eval_test(
         env,
@@ -99,7 +116,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='csi')  # kdd, hightech, dow,  ndx, mdax, csi
     parser.add_argument('--env', type=str, default='stock')
-    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--seed', type=int, default=3389)
     parser.add_argument('--u', type=int, default=20)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--embed_dim', type=int, default=128)
@@ -108,6 +125,6 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--device', type=str, default='cuda')
-
+    parser.add_argument('--algo', type=str, default='transformer')
     args = parser.parse_args()
     experiment(variant=vars(args))

@@ -9,13 +9,17 @@ from stock_env.allocation.env_portfolio import StockPortfolioEnv
 import torch
 from tac.models.transformer_actor import TransformerActor
 from tac.training.seq_trainer import SequenceTrainer
+from tac.training.trainer import Trainer
 import torch.backends.cudnn as cudnn
+from tac.models.ddpg import DDPGActor
+from tac.training.ddpg_trainer import DDPGTrainer
 
 def main(variant):
     device = variant.get('device', 'cuda')
     log_to_wandb = variant.get('log_to_wandb', False)
 
     env_name, dataset = variant['env'], variant['dataset']
+    train_algo = variant['algo'] #control use which algorithm 
     group_name = f'{env_name}-{dataset}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
@@ -60,22 +64,36 @@ def main(variant):
 
     # Algorithm 1, line3 : Set the length of the sequence u
     u = variant['u']
-
-    model = TransformerActor(
-        state_dim=state_dim,
-        act_dim=act_dim,
-        max_length=u,
-        max_ep_len=max_ep_len,
-        hidden_size=variant['embed_dim'],
-        n_layer=variant['n_layer'],
-        n_head=variant['n_head'],
-        n_inner=4 * variant['embed_dim'],
-        activation_function=variant['activation_function'],
-        n_positions=1024,
-        resid_pdrop=variant['dropout'],
-        attn_pdrop=variant['dropout'],
-    )
-
+    if train_algo == "transformer":
+        model = TransformerActor(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            max_length=u,
+            max_ep_len=max_ep_len,
+            hidden_size=variant['embed_dim'],
+            n_layer=variant['n_layer'],
+            n_head=variant['n_head'],
+            n_inner=4 * variant['embed_dim'],
+            activation_function=variant['activation_function'],
+            n_positions=1024,
+            resid_pdrop=variant['dropout'],
+            attn_pdrop=variant['dropout'],
+        )
+    elif train_algo == "DDPG":
+        model = DDPGActor(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            max_length=u,
+            max_ep_len=max_ep_len,
+            hidden_size=variant['embed_dim'],
+            n_layer=variant['n_layer'],
+            n_head=variant['n_head'],
+            n_inner=4 * variant['embed_dim'],
+            activation_function=variant['activation_function'],
+            n_positions=1024,
+            resid_pdrop=variant['dropout'],
+            attn_pdrop=variant['dropout'],
+        )
     states, traj_lens, returns = [], [], []
     for path in trajectories:
         states.append(path['observations'])
@@ -177,21 +195,34 @@ def main(variant):
         optimizer,
         lambda steps: min((steps + 1) / warmup_steps, 1)
     )
-
-    trainer = SequenceTrainer(
-        model=model,
-        optimizer=optimizer,
-        batch_size=batch_size,
-        get_batch=get_batch,
-        scheduler=scheduler,
-        action_dim=act_dim,
-        state_dim=state_dim,
-        state_mean=state_mean,
-        state_std=state_std,
-        alpha=variant['alpha'],
-        crtic_lr=variant['critic_learning_rate'],
-    )
-
+    if train_algo == "transformer":
+        trainer = SequenceTrainer(
+            model=model,
+            optimizer=optimizer,
+            batch_size=batch_size,
+            get_batch=get_batch,
+            scheduler=scheduler,
+            action_dim=act_dim,
+            state_dim=state_dim,
+            state_mean=state_mean,
+            state_std=state_std,
+            alpha=variant['alpha'],
+            crtic_lr=variant['critic_learning_rate'],
+        )
+    elif train_algo == "DDPG":
+        trainer = DDPGTrainer(
+            model=model,
+            optimizer=optimizer,
+            batch_size=batch_size,
+            get_batch=get_batch,
+            scheduler=scheduler,
+            action_dim=act_dim,
+            state_dim=state_dim,
+            state_mean=state_mean,
+            state_std=state_std,
+            alpha=variant['alpha'],
+            crtic_lr=variant['critic_learning_rate'],
+        )
     if log_to_wandb:
         wandb.init(
             name=exp_prefix,
@@ -206,13 +237,13 @@ def main(variant):
         if log_to_wandb:
             wandb.log(outputs)
 
-    torch.save(trainer.actor.state_dict(), group_name+'.pt')
+    torch.save(trainer.actor.state_dict(), group_name+'_'+train_algo+'.pt')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='kdd')  # kdd, hightech, dow, ndx, mdax, csi
     parser.add_argument('--env', type=str, default='stock')
-    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--seed', type=int, default=3389)
     parser.add_argument('--u', type=int, default=20) # 40 (kdd, hightech, dow), 20 (ndx, mdax, csi)
     parser.add_argument('--alpha', type=int, default=0.9) # 1.6 (kdd), 2. (hightech), 1.4 (dow), 0.9 (ndx, mdax, csi)
     parser.add_argument('--pct_traj', type=float, default=1.)
@@ -230,6 +261,6 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps_per_iter', type=int, default=4000)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
-
+    parser.add_argument('--algo', type=str, default='transformer')
     args = parser.parse_args()
     main(vars(args))

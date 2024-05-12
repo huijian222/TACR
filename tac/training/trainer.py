@@ -16,6 +16,7 @@ class Critic(nn.Module):
         self.l3 = nn.Linear(256, 1)
 
     def forward(self, state, action):
+        
         sa = torch.cat([state, action], 1)
 
         q = F.relu(self.l1(sa))

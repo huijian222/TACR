@@ -100,7 +100,7 @@ class TransformerActor(TrajectoryModel):
         actions = actions.reshape(1, -1, self.act_dim)
         rewards = rewards.reshape(1, -1, 1)
         timesteps = timesteps.reshape(1, -1)
-
+        print("timesteps shape",timesteps.shape, "timesteps first", timesteps[0])
         if self.max_length is not None:
             states = states[:,-self.max_length:]
             actions = actions[:,-self.max_length:]

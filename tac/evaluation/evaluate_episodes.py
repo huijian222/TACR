@@ -45,7 +45,6 @@ def eval_test(
         )
         actions[-1] = action
         action = action.detach().cpu().numpy()
-
         state, reward, done, _ = env.step(action)
         state = np.array(state)
 

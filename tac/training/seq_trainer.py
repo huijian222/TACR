@@ -29,6 +29,7 @@ class SequenceTrainer(Trainer):
 
         # Algorithm 1, line9, line10
         # Compute the target Q value
+        #print('here show the dimension diff', next_state.shape, next_Q_action_preds.shape)
         target_Q = self.critic_target(next_state, next_Q_action_preds)
         target_Q = rewards + (dones * self.discount * target_Q).detach()
         # Get current Q estimates
